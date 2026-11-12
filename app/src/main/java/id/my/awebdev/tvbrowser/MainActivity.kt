@@ -15,11 +15,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import java.net.URLEncoder
 
 /**
  * Layar TV: satu WebView layar penuh yang seluruh kendalinya datang dari
@@ -30,7 +31,10 @@ class MainActivity : AppCompatActivity(), BrowserController {
 
     private lateinit var webView: WebView
     private lateinit var progress: ProgressBar
+    private lateinit var connectPanel: LinearLayout
+    private lateinit var qrImage: ImageView
     private lateinit var infoText: TextView
+    private lateinit var urlText: TextView
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var chromeClient: WebChromeClient
 
@@ -39,7 +43,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
     private var defaultUa: String = ""
 
     private val infoHandler = Handler(Looper.getMainLooper())
-    private val hideInfo = Runnable { infoText.visibility = View.GONE }
+    private val hideInfo = Runnable { connectPanel.visibility = View.GONE }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,7 +53,10 @@ class MainActivity : AppCompatActivity(), BrowserController {
 
         webView = findViewById(R.id.webView)
         progress = findViewById(R.id.progress)
+        connectPanel = findViewById(R.id.connectPanel)
+        qrImage = findViewById(R.id.qrImage)
         infoText = findViewById(R.id.infoText)
+        urlText = findViewById(R.id.urlText)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
 
         configureWebView()
@@ -62,7 +69,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
             webView.restoreState(savedInstanceState)
         }
         webView.requestFocus()
-        showInfoBar()
+        showConnectPanel()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -157,26 +164,52 @@ class MainActivity : AppCompatActivity(), BrowserController {
         customCallback = null
     }
 
-    // ---- Info bar (alamat remote + PIN + halaman aktif) ----
+    // ---- Panel koneksi (QR + alamat remote + PIN + URL aktif) ----
 
     private fun updateInfoText() {
         val ip = ServerService.localIpAddress() ?: "?"
-        val page = webView.title?.takeIf { it.isNotBlank() } ?: webView.url ?: ""
-        infoText.text = "Remote HP: http://$ip:${RemoteServer.PORT}  •  PIN ${ServerService.pin(this)}  •  $page"
+        infoText.text =
+            "Remote HP: http://$ip:${RemoteServer.PORT}  •  PIN ${ServerService.pin(this)}"
+        // URL aktif ditampilkan utuh (bukan judul halaman) supaya bisa
+        // dibaca persis — inilah "link" yang dulu tidak sempat terbaca.
+        urlText.text = webView.url ?: ""
     }
 
-    private fun showInfoBar() {
+    private fun showConnectPanel() {
         updateInfoText()
-        infoText.visibility = View.VISIBLE
+        // QR dibuat ulang setiap panel tampil, jadi selalu memakai
+        // alamat IP box yang berlaku saat itu juga.
+        val ip = ServerService.localIpAddress()
+        val qr = ip?.let {
+            QrCodeHelper.makeBitmap(
+                "http://$it:${RemoteServer.PORT}/?pin=${ServerService.pin(this)}"
+            )
+        }
+        if (qr != null) {
+            qrImage.setImageBitmap(qr)
+            qrImage.visibility = View.VISIBLE
+        } else {
+            qrImage.visibility = View.GONE
+        }
+        connectPanel.visibility = View.VISIBLE
         infoHandler.removeCallbacks(hideInfo)
-        infoHandler.postDelayed(hideInfo, 7000)
+        infoHandler.postDelayed(hideInfo, PANEL_TIMEOUT_MS)
+    }
+
+    private fun hideConnectPanel() {
+        infoHandler.removeCallbacks(hideInfo)
+        connectPanel.visibility = View.GONE
     }
 
     // ---- BrowserController (dipanggil server lewat thread utama) ----
 
     override fun openUrl(raw: String) {
-        webView.loadUrl(normalizeUrl(raw))
-        showInfoBar()
+        val url = UrlResolver.resolve(raw) ?: return
+        webView.loadUrl(url)
+    }
+
+    override fun showInfo() {
+        showConnectPanel()
     }
 
     override fun navigate(action: String) {
@@ -249,22 +282,12 @@ class MainActivity : AppCompatActivity(), BrowserController {
     }
 
     private fun handleBack() {
-        if (customView != null) {
+        if (connectPanel.visibility == View.VISIBLE) {
+            hideConnectPanel()
+        } else if (customView != null) {
             hideCustomView()
         } else if (webView.canGoBack()) {
             webView.goBack()
-        }
-    }
-
-    /** Teks tanpa skema & tanpa titik dianggap kata pencarian. */
-    private fun normalizeUrl(raw: String): String {
-        val text = raw.trim()
-        if (text.startsWith("http://") || text.startsWith("https://")) return text
-        val looksLikeHost = !text.contains(' ') && text.contains('.')
-        return if (looksLikeHost) {
-            "https://$text"
-        } else {
-            "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(text, "UTF-8")
         }
     }
 
@@ -274,7 +297,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_MENU) {
-            showInfoBar()
+            showConnectPanel()
             return true
         }
         return super.onKeyDown(keyCode, event)
@@ -305,6 +328,8 @@ class MainActivity : AppCompatActivity(), BrowserController {
     }
 
     companion object {
+        // Panel koneksi tampil cukup lama untuk sempat dipindai/dibaca.
+        private const val PANEL_TIMEOUT_MS = 60_000L
         private const val HOME_URL = "https://html.duckduckgo.com/html/"
         private const val DESKTOP_UA =
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +

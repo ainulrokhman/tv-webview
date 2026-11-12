@@ -6,8 +6,14 @@ package id.my.awebdev.tvbrowser
  * implementasi; server tidak pernah memegang WebView secara langsung.
  */
 interface BrowserController {
-    /** Buka alamat atau kata pencarian (dinormalisasi di implementasi). */
+    /**
+     * Buka teks dari kolom alamat remote. Link selalu dibuka langsung
+     * (lihat [UrlResolver]); teks yang bukan alamat dianggap pencarian.
+     */
     fun openUrl(raw: String)
+
+    /** Tampilkan panel koneksi (QR + alamat + PIN) di layar TV. */
+    fun showInfo()
 
     /** Aksi navigasi: back | forward | reload | stop | home. */
     fun navigate(action: String)

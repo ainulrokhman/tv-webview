@@ -72,6 +72,7 @@ class RemoteServer(
                     )
                 when (param("type")) {
                     "open" -> post { it.openUrl(param("url")) }
+                    "info" -> post { it.showInfo() }
                     "nav" -> post { it.navigate(param("action")) }
                     "scroll" -> post { it.scrollBy(param("dy").toIntOrNull() ?: 0) }
                     "tap" -> post {

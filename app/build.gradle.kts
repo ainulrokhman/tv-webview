@@ -42,4 +42,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     // Server HTTP ringan untuk halaman remote + endpoint perintah
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+    // Pembuat QR untuk panel koneksi TV (hanya encoder; pemindaian
+    // dilakukan kamera HP, bukan aplikasi ini)
+    implementation("com.google.zxing:core:3.5.3")
 }

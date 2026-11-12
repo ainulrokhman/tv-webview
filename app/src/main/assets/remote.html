@@ -57,6 +57,9 @@
       <button data-nav="home">Beranda</button>
       <button id="favCurrent">☆ Simpan Halaman Ini</button>
     </div>
+    <div class="row" style="margin-top:8px">
+      <button id="infoBtn">📺 Tampilkan QR + PIN di TV</button>
+    </div>
   </section>
 
   <section>
@@ -109,6 +112,17 @@
   var pin = localStorage.getItem('tv_browser_pin') || '';
   var lastState = { url: '', title: '' };
 
+  // Hasil pindai QR di TV membawa PIN lewat ?pin=... — simpan sekali,
+  // lalu bersihkan dari address bar supaya tidak menetap di riwayat HP.
+  (function () {
+    var q = new URLSearchParams(location.search).get('pin');
+    if (q) {
+      pin = q;
+      localStorage.setItem('tv_browser_pin', q);
+      history.replaceState(null, '', location.pathname);
+    }
+  })();
+
   function setStatus(msg, isErr) {
     statusEl.textContent = msg;
     statusEl.className = isErr ? 'err' : '';
@@ -138,7 +152,7 @@
         if (!j.ok) { showPinBox(); setStatus('PIN salah — isi PIN dari layar TV.', true); return; }
         if (!j.ready) { setStatus('Server aktif, tetapi layar TV belum terbuka — buka aplikasinya di box.', true); return; }
         lastState = j;
-        setStatus('TV: ' + (j.title || j.url));
+        setStatus('TV: ' + (j.url || '') + (j.title ? ' — ' + j.title : ''));
       })
       .catch(function () { setStatus('Tidak terhubung ke box. Cek WiFi yang sama.', true); });
   }
@@ -196,6 +210,7 @@
     if (v) send({ type: 'text', value: v });
     document.getElementById('text').value = '';
   };
+  document.getElementById('infoBtn').onclick = function () { send({ type: 'info' }); };
   document.getElementById('favCurrent').onclick = function () {
     if (!lastState.url) { setStatus('Belum ada halaman aktif di TV.', true); return; }
     send({ type: 'fav_add', name: lastState.title || lastState.url, url: lastState.url }).then(refreshFavs);

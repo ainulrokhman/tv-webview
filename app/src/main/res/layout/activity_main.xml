@@ -28,16 +28,47 @@
         android:max="100"
         android:visibility="gone" />
 
-    <!-- Info bar: alamat remote + PIN + halaman aktif; tampil sebentar
-         saat aplikasi dibuka / link dibuka dari HP / tombol Menu ditekan. -->
-    <TextView
-        android:id="@+id/infoText"
+    <!-- Panel koneksi: QR berisi alamat remote + PIN (cukup dipindai
+         kamera HP), teks alamat/PIN sebagai cadangan manual, dan URL
+         halaman aktif. Tampil saat aplikasi dibuka, lewat tombol Menu,
+         atau perintah Info dari HP; hilang sendiri setelah 60 detik. -->
+    <LinearLayout
+        android:id="@+id/connectPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
         android:background="#CC101418"
-        android:padding="10dp"
-        android:textColor="#FFFFFF"
-        android:textSize="15sp"
-        android:visibility="gone" />
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/qrImage"
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:contentDescription="QR alamat remote" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/infoText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/urlText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="#B9C6D0"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
 </FrameLayout>
