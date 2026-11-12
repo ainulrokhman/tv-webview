@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remote TV Browser</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #101418; color: #f2f5f7; }
+  main { max-width: 560px; margin: 0 auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+  h1 { font-size: 17px; margin: 2px 0; }
+  #status { font-size: 13px; color: #9fd3a8; min-height: 18px; word-break: break-all; }
+  #status.err { color: #ff9c9c; }
+  section { background: #1a2129; border-radius: 12px; padding: 10px; }
+  section h2 { font-size: 13px; margin: 0 0 8px; color: #b9c6d0; font-weight: 600; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  input, select, button { font-size: 15px; padding: 10px; border-radius: 9px; border: 1px solid #33404d; background: #232d38; color: #f2f5f7; min-width: 0; }
+  button { cursor: pointer; }
+  button:active { background: #2f6db3; }
+  button.primary { background: #2f6db3; border-color: #2f6db3; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .grid button { padding: 14px 6px; font-size: 17px; }
+  #pad { height: 150px; border-radius: 12px; background: #232d38; border: 1px dashed #3d4c5c; display: flex; align-items: center; justify-content: center; color: #8fa3b5; font-size: 13px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .fav { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+  .fav button:first-child { flex: 1; text-align: left; word-break: break-all; }
+  .fav button:last-child { flex: 0 0 auto; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Remote TV Browser</h1>
+  <div id="status">Menghubungi box…</div>
+
+  <section id="pinBox" class="hidden">
+    <h2>PIN (lihat di layar TV)</h2>
+    <div class="row">
+      <input id="pin" inputmode="numeric" maxlength="4" placeholder="4 digit">
+      <button id="savePin" class="primary">Simpan</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Buka link / cari</h2>
+    <form id="openForm" class="row">
+      <input id="url" placeholder="Tempel link, atau ketik kata pencarian" autocomplete="off">
+      <button class="primary" style="flex:0 0 auto">Buka</button>
+    </form>
+    <div class="row" style="margin-top:8px">
+      <button data-nav="back">⟵ Kembali</button>
+      <button data-nav="forward">Maju ⟶</button>
+      <button data-nav="reload">Muat Ulang</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button data-nav="stop">Stop</button>
+      <button data-nav="home">Beranda</button>
+      <button id="favCurrent">☆ Simpan Halaman Ini</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Navigasi dalam halaman</h2>
+    <div class="grid">
+      <span></span><button data-key="up">▲</button><span></span>
+      <button data-key="left">◀</button><button data-key="ok">OK</button><button data-key="right">▶</button>
+      <span></span><button data-key="down">▼</button><span></span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button data-key="back">Kembali</button>
+      <button data-key="space">Putar / Jeda (spasi)</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="scrollUp">Gulir ↑</button>
+      <button id="scrollDown">Gulir ↓</button>
+      <button data-zoom="out">Zoom −</button>
+      <button data-zoom="in">Zoom +</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Touchpad</h2>
+    <div id="pad">Ketuk = klik di posisi itu • Geser = gulir</div>
+  </section>
+
+  <section>
+    <h2>Ketik dari HP</h2>
+    <form id="textForm" class="row">
+      <input id="text" placeholder="Klik dulu kolomnya di halaman TV, lalu ketik di sini" autocomplete="off">
+      <button class="primary" style="flex:0 0 auto">Kirim</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Tampilan (User-Agent)</h2>
+    <div class="row">
+      <button data-ua="default">Bawaan</button>
+      <button data-ua="desktop">Desktop</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Favorit</h2>
+    <div id="favs"><i>Memuat…</i></div>
+  </section>
+</main>
+<script>
+  var statusEl = document.getElementById('status');
+  var pin = localStorage.getItem('tv_browser_pin') || '';
+  var lastState = { url: '', title: '' };
+
+  function setStatus(msg, isErr) {
+    statusEl.textContent = msg;
+    statusEl.className = isErr ? 'err' : '';
+  }
+
+  function showPinBox() { document.getElementById('pinBox').classList.remove('hidden'); }
+
+  function send(params) {
+    params.pin = pin;
+    return fetch('/cmd', { method: 'POST', body: new URLSearchParams(params) })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+      .then(function (res) {
+        if (!res.body.ok) {
+          if (res.status === 403) { showPinBox(); setStatus('PIN salah — isi PIN dari layar TV.', true); }
+          else setStatus(res.body.error || 'Gagal', true);
+        }
+        return res.body;
+      })
+      .catch(function () { setStatus('Tidak terhubung ke box. Cek WiFi yang sama.', true); });
+  }
+
+  function refreshState() {
+    if (!pin) { showPinBox(); setStatus('Isi PIN dari layar TV dulu.', true); return; }
+    fetch('/state?pin=' + encodeURIComponent(pin))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { showPinBox(); setStatus('PIN salah — isi PIN dari layar TV.', true); return; }
+        if (!j.ready) { setStatus('Server aktif, tetapi layar TV belum terbuka — buka aplikasinya di box.', true); return; }
+        lastState = j;
+        setStatus('TV: ' + (j.title || j.url));
+      })
+      .catch(function () { setStatus('Tidak terhubung ke box. Cek WiFi yang sama.', true); });
+  }
+
+  function refreshFavs() {
+    if (!pin) return;
+    fetch('/favorites?pin=' + encodeURIComponent(pin))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var box = document.getElementById('favs');
+        box.innerHTML = '';
+        if (!j.ok || !j.items.length) { box.innerHTML = '<i>Belum ada favorit.</i>'; return; }
+        j.items.forEach(function (f) {
+          var row = document.createElement('div'); row.className = 'fav';
+          var open = document.createElement('button'); open.textContent = f.name;
+          open.onclick = function () { send({ type: 'open', url: f.url }); };
+          var del = document.createElement('button'); del.textContent = '✕';
+          del.onclick = function () { send({ type: 'fav_del', url: f.url }).then(refreshFavs); };
+          row.appendChild(open); row.appendChild(del); box.appendChild(row);
+        });
+      })
+      .catch(function () {});
+  }
+
+  document.getElementById('savePin').onclick = function () {
+    pin = document.getElementById('pin').value.trim();
+    localStorage.setItem('tv_browser_pin', pin);
+    document.getElementById('pinBox').classList.add('hidden');
+    refreshState(); refreshFavs();
+  };
+  if (pin) document.getElementById('pin').value = pin;
+
+  document.getElementById('openForm').onsubmit = function (e) {
+    e.preventDefault();
+    var v = document.getElementById('url').value.trim();
+    if (v) send({ type: 'open', url: v }).then(function () { setTimeout(refreshState, 800); });
+  };
+  document.querySelectorAll('[data-nav]').forEach(function (b) {
+    b.onclick = function () { send({ type: 'nav', action: b.dataset.nav }); };
+  });
+  document.querySelectorAll('[data-key]').forEach(function (b) {
+    b.onclick = function () { send({ type: 'key', code: b.dataset.key }); };
+  });
+  document.querySelectorAll('[data-zoom]').forEach(function (b) {
+    b.onclick = function () { send({ type: 'zoom', action: b.dataset.zoom }); };
+  });
+  document.querySelectorAll('[data-ua]').forEach(function (b) {
+    b.onclick = function () { send({ type: 'ua', mode: b.dataset.ua }); };
+  });
+  document.getElementById('scrollUp').onclick = function () { send({ type: 'scroll', dy: -600 }); };
+  document.getElementById('scrollDown').onclick = function () { send({ type: 'scroll', dy: 600 }); };
+  document.getElementById('textForm').onsubmit = function (e) {
+    e.preventDefault();
+    var v = document.getElementById('text').value;
+    if (v) send({ type: 'text', value: v });
+    document.getElementById('text').value = '';
+  };
+  document.getElementById('favCurrent').onclick = function () {
+    if (!lastState.url) { setStatus('Belum ada halaman aktif di TV.', true); return; }
+    send({ type: 'fav_add', name: lastState.title || lastState.url, url: lastState.url }).then(refreshFavs);
+  };
+
+  var pad = document.getElementById('pad'), startX = 0, startY = 0, startT = 0;
+  pad.addEventListener('pointerdown', function (e) {
+    startX = e.clientX; startY = e.clientY; startT = Date.now();
+    pad.setPointerCapture(e.pointerId);
+  });
+  pad.addEventListener('pointerup', function (e) {
+    var dx = e.clientX - startX, dy = e.clientY - startY;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (Date.now() - startT < 350 && dist < 24) {
+      var r = pad.getBoundingClientRect();
+      var x = Math.round((e.clientX - r.left) / r.width * 1000);
+      var y = Math.round((e.clientY - r.top) / r.height * 1000);
+      send({ type: 'tap', x: x, y: y });
+    } else if (Math.abs(dy) > 24) {
+      send({ type: 'scroll', dy: Math.round(-dy * 3) });
+    }
+  });
+
+  refreshState(); refreshFavs();
+  setInterval(refreshState, 4000);
+</script>
+</body>
+</html>
