@@ -24,6 +24,12 @@ interface BrowserController {
     /** Ketuk pada posisi relatif 0f..1f terhadap ukuran WebView. */
     fun tapAt(xFraction: Float, yFraction: Float)
 
+    /** Geser dari satu posisi relatif ke posisi lain (pecahan 0f..1f). */
+    fun swipe(x1: Float, y1: Float, x2: Float, y2: Float)
+
+    /** Tangkapan layar WebView saat ini sebagai JPEG; null bila belum siap. */
+    fun screenshotJpeg(): ByteArray?
+
     /** Tombol arah & kawan-kawan: up | down | left | right | ok | back | space. */
     fun key(code: String)
 

@@ -3,6 +3,8 @@ package id.my.awebdev.tvbrowser
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -24,6 +26,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import java.io.ByteArrayOutputStream
 
 /**
  * Layar TV: satu WebView layar penuh yang seluruh kendalinya datang dari
@@ -287,6 +290,67 @@ class MainActivity : AppCompatActivity(), BrowserController {
         up.recycle()
     }
 
+    override fun swipe(x1: Float, y1: Float, x2: Float, y2: Float) {
+        val w = webView.width
+        val h = webView.height
+        if (w == 0 || h == 0) return
+        val startX = x1 * w
+        val startY = y1 * h
+        val endX = x2 * w
+        val endY = y2 * h
+        val downTime = SystemClock.uptimeMillis()
+        val steps = 12
+        val down = MotionEvent.obtain(
+            downTime, downTime, MotionEvent.ACTION_DOWN, startX, startY, 0
+        )
+        webView.dispatchTouchEvent(down)
+        down.recycle()
+        // Gerakan dipecah menjadi langkah-langkah MOVE supaya halaman
+        // membacanya sebagai usapan sungguhan, bukan teleport.
+        for (i in 1 until steps) {
+            val t = i.toFloat() / steps
+            val move = MotionEvent.obtain(
+                downTime,
+                downTime + i * 20L,
+                MotionEvent.ACTION_MOVE,
+                startX + (endX - startX) * t,
+                startY + (endY - startY) * t,
+                0
+            )
+            webView.dispatchTouchEvent(move)
+            move.recycle()
+        }
+        val up = MotionEvent.obtain(
+            downTime, downTime + steps * 20L, MotionEvent.ACTION_UP, endX, endY, 0
+        )
+        webView.dispatchTouchEvent(up)
+        up.recycle()
+    }
+
+    override fun screenshotJpeg(): ByteArray? {
+        val w = webView.width
+        val h = webView.height
+        if (w <= 0 || h <= 0) return null
+        // Resolusi diturunkan (lebar maks ±960px) supaya ringan di box
+        // dan WiFi — cukup tajam untuk membidik tombol kecil.
+        val scale = if (w > MAX_SHOT_WIDTH) MAX_SHOT_WIDTH.toFloat() / w else 1f
+        val bitmap = Bitmap.createBitmap(
+            (w * scale).toInt().coerceAtLeast(1),
+            (h * scale).toInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        canvas.scale(scale, scale)
+        // Yang digambar adalah tampilan WebView saat ini. Permukaan video
+        // terproteksi memang tidak bisa ditangkap — area itu bisa hitam,
+        // walau di TV tampil normal.
+        webView.draw(canvas)
+        val out = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 60, out)
+        bitmap.recycle()
+        return out.toByteArray()
+    }
+
     override fun key(code: String) {
         when (code) {
             "back" -> handleBack()
@@ -371,6 +435,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
 
     companion object {
         private const val REQ_NOTIFICATIONS = 1001
+        private const val MAX_SHOT_WIDTH = 960
         // Halaman awal lokal: form link/keyword + tempat blok QR tampil.
         private const val HOME_URL = "file:///android_asset/home.html"
         private const val DESKTOP_UA =

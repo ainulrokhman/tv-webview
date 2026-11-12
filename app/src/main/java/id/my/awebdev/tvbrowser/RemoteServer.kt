@@ -46,6 +46,7 @@ class RemoteServer(
             return json(Response.Status.FORBIDDEN, """{"ok":false,"error":"PIN salah"}""")
         }
         return when {
+            session.method == Method.GET && session.uri == "/shot" -> shotResponse()
             session.method == Method.GET && session.uri == "/state" -> stateResponse()
             session.method == Method.GET && session.uri == "/favorites" -> favoritesResponse()
             session.method == Method.POST && session.uri == "/cmd" -> command(params)
@@ -80,6 +81,13 @@ class RemoteServer(
                         val y = (param("y").toIntOrNull() ?: 0).coerceIn(0, 1000) / 1000f
                         it.tapAt(x, y)
                     }
+                    "swipe" -> post {
+                        val x1 = (param("x1").toIntOrNull() ?: 0).coerceIn(0, 1000) / 1000f
+                        val y1 = (param("y1").toIntOrNull() ?: 0).coerceIn(0, 1000) / 1000f
+                        val x2 = (param("x2").toIntOrNull() ?: 0).coerceIn(0, 1000) / 1000f
+                        val y2 = (param("y2").toIntOrNull() ?: 0).coerceIn(0, 1000) / 1000f
+                        it.swipe(x1, y1, x2, y2)
+                    }
                     "key" -> post { it.key(param("code")) }
                     "text" -> post { it.typeText(param("value")) }
                     "ua" -> post { it.setUserAgent(param("mode")) }
@@ -112,6 +120,37 @@ class RemoteServer(
             Response.Status.OK,
             """{"ok":true,"ready":true,"url":"${escape(page.url)}","title":"${escape(page.title)}"}"""
         )
+    }
+
+    private fun shotResponse(): Response {
+        val controller = BrowserHolder.controller
+            ?: return json(
+                Response.Status.SERVICE_UNAVAILABLE,
+                """{"ok":false,"error":"Layar TV belum aktif — buka aplikasinya di box"}"""
+            )
+        // Sama seperti state: WebView hanya boleh disentuh thread utama,
+        // jadi thread server menunggu hasilnya lewat latch.
+        var bytes: ByteArray? = null
+        val latch = CountDownLatch(1)
+        mainHandler.post {
+            bytes = try {
+                controller.screenshotJpeg()
+            } catch (e: Exception) {
+                null
+            }
+            latch.countDown()
+        }
+        latch.await(4, TimeUnit.SECONDS)
+        val data = bytes
+            ?: return json(
+                Response.Status.INTERNAL_ERROR,
+                """{"ok":false,"error":"Gagal mengambil gambar layar"}"""
+            )
+        val response = newFixedLengthResponse(
+            Response.Status.OK, "image/jpeg", data.inputStream(), data.size.toLong()
+        )
+        response.addHeader("Cache-Control", "no-store")
+        return response
     }
 
     private fun favoritesResponse(): Response {

@@ -22,6 +22,8 @@
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .grid button { padding: 14px 6px; font-size: 17px; }
   #pad { height: 150px; border-radius: 12px; background: #232d38; border: 1px dashed #3d4c5c; display: flex; align-items: center; justify-content: center; color: #8fa3b5; font-size: 13px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #shot { width: 100%; display: block; border-radius: 9px; background: #000; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .hint { font-size: 12px; color: #8fa3b5; margin: 8px 0 0; line-height: 1.5; }
   .fav { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
   .fav button:first-child { flex: 1; text-align: left; word-break: break-all; }
   .fav button:last-child { flex: 0 0 auto; }
@@ -87,6 +89,16 @@
   </section>
 
   <section>
+    <h2>Layar TV (Snapshot)</h2>
+    <div class="row">
+      <button id="shotBtn" class="primary">Lihat Layar</button>
+      <button id="shotRefresh">Segarkan</button>
+    </div>
+    <img id="shot" class="hidden" alt="Tangkapan layar TV" style="margin-top:8px">
+    <p class="hint">Ketuk gambar untuk mengklik titik itu di TV — pas untuk sasaran kecil seperti tombol tutup iklan. Geser pada gambar untuk menggeser halaman. Gambar otomatis diperbarui setelah setiap aksi. Isi video terproteksi dapat tampil hitam.</p>
+  </section>
+
+  <section>
     <h2>Ketik dari HP</h2>
     <form id="textForm" class="row">
       <input id="text" placeholder="Klik dulu kolomnya di halaman TV, lalu ketik di sini" autocomplete="off">
@@ -138,6 +150,8 @@
         if (!res.body.ok) {
           if (res.status === 403) { showPinBox(); setStatus('PIN salah — isi PIN dari layar TV.', true); }
           else setStatus(res.body.error || 'Gagal', true);
+        } else {
+          scheduleShotRefresh();
         }
         return res.body;
       })
@@ -215,6 +229,47 @@
     if (!lastState.url) { setStatus('Belum ada halaman aktif di TV.', true); return; }
     send({ type: 'fav_add', name: lastState.title || lastState.url, url: lastState.url }).then(refreshFavs);
   };
+
+  var shotImg = document.getElementById('shot');
+  var shotVisible = false, shotTimer = null;
+  function loadShot() {
+    if (!pin) { showPinBox(); setStatus('Isi PIN dari layar TV dulu.', true); return; }
+    shotImg.src = '/shot?pin=' + encodeURIComponent(pin) + '&t=' + Date.now();
+  }
+  function scheduleShotRefresh() {
+    if (!shotVisible) return;
+    clearTimeout(shotTimer);
+    // Beri waktu halaman TV bereaksi dulu, baru ambil gambar barunya.
+    shotTimer = setTimeout(loadShot, 700);
+  }
+  shotImg.onload = function () {
+    shotVisible = true;
+    shotImg.classList.remove('hidden');
+  };
+  shotImg.onerror = function () {
+    setStatus('Gagal mengambil gambar layar — pastikan aplikasinya terbuka di TV.', true);
+  };
+  document.getElementById('shotBtn').onclick = loadShot;
+  document.getElementById('shotRefresh').onclick = loadShot;
+
+  var sX = 0, sY = 0, sT = 0;
+  shotImg.addEventListener('pointerdown', function (e) {
+    sX = e.clientX; sY = e.clientY; sT = Date.now();
+    shotImg.setPointerCapture(e.pointerId);
+  });
+  shotImg.addEventListener('pointerup', function (e) {
+    var r = shotImg.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    function fx(cx) { return Math.max(0, Math.min(1000, Math.round((cx - r.left) / r.width * 1000))); }
+    function fy(cy) { return Math.max(0, Math.min(1000, Math.round((cy - r.top) / r.height * 1000))); }
+    var dx = e.clientX - sX, dy = e.clientY - sY;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (Date.now() - sT < 350 && dist < 24) {
+      send({ type: 'tap', x: fx(e.clientX), y: fy(e.clientY) });
+    } else if (dist >= 24) {
+      send({ type: 'swipe', x1: fx(sX), y1: fy(sY), x2: fx(e.clientX), y2: fy(e.clientY) });
+    }
+  });
 
   var pad = document.getElementById('pad'), startX = 0, startY = 0, startT = 0;
   pad.addEventListener('pointerdown', function (e) {

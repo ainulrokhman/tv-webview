@@ -23,6 +23,10 @@ yang dikendalikan hanya aplikasi ini sendiri.
     (putar/jeda di banyak pemutar web).
   - **Touchpad**: ketuk = klik pada posisi relatif yang sama di TV,
     geser vertikal = gulir halaman. Tombol Gulir ↑/↓ dan Zoom +/−.
+  - **Snapshot layar**: ambil gambar layar TV seperlunya, lalu ketuk atau
+    geser langsung pada gambarnya — untuk sasaran kecil seperti tombol
+    tutup iklan. Gambar diperbarui otomatis setelah setiap aksi; bukan
+    siaran terus-menerus, jadi box tetap ringan.
   - **Ketik dari HP** ke kolom yang sedang fokus di halaman TV.
   - Ganti **User-Agent** Bawaan/Desktop (halaman dimuat ulang).
   - **Favorit**: simpan halaman yang sedang terbuka, buka lagi sekali
