@@ -31,6 +31,10 @@ yang dikendalikan hanya aplikasi ini sendiri.
   - Ganti **User-Agent** Bawaan/Desktop (halaman dimuat ulang).
   - **Favorit**: simpan halaman yang sedang terbuka, buka lagi sekali
     ketuk, hapus. Tersimpan di box.
+  - **Deteksi video**: elemen `<video>` dan lalu lintas jaringan halaman
+    dipantau; daftar video tampil di remote. Stream langsung
+    (.m3u8/.mpd/.mp4) bisa **diputar di pemutar khusus** (ExoPlayer) atau
+    dibuat **layar penuh** dari remote.
   - Video HTML5 bisa **layar penuh** (tombol fullscreen di pemutar web),
     layar TV tidak tidur selama aplikasi di depan, cookie/login tersimpan.
 
@@ -94,6 +98,9 @@ Bila ada error saat build pertama di Android Studio, kirim pesan errornya
 - `ServerService.kt` — foreground service: PIN, alamat IP, notifikasi.
 - `BootReceiver.kt` — server menyala setelah booting.
 - `FavoritesStore.kt` — favorit di SharedPreferences.
+- `VideoDetector.kt` — gudang hasil deteksi video (jaringan + DOM).
+- `PlayerActivity.kt` — pemutar ExoPlayer untuk stream langsung yang
+  terdeteksi (Referer + User-Agent halaman asal ikut dikirim).
 - `assets/remote.html` — halaman remote HP (satu file, tanpa build).
 - `assets/home.html` — halaman awal lokal di TV (form link/keyword yang
   dikirim lewat skema `tvbrowser://` dan diputuskan `UrlResolver`).

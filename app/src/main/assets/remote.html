@@ -99,6 +99,15 @@
   </section>
 
   <section>
+    <h2>Video Terdeteksi</h2>
+    <div class="row">
+      <button id="videosBtn" class="primary">Segarkan Daftar</button>
+    </div>
+    <div id="videos" style="margin-top:8px"><i>Buka halaman berisi video, lalu segarkan.</i></div>
+    <p class="hint">Tombol <b>Pemutar</b> hanya untuk stream langsung (HLS/DASH/berkas) — diputar di pemutar khusus yang lebih ringan. Stream ber-DRM tidak bisa diputar di pemutar; tetap putar lewat halamannya. Iklan video ikut terdeteksi.</p>
+  </section>
+
+  <section>
     <h2>Ketik dari HP</h2>
     <form id="textForm" class="row">
       <input id="text" placeholder="Klik dulu kolomnya di halaman TV, lalu ketik di sini" autocomplete="off">
@@ -152,6 +161,7 @@
           else setStatus(res.body.error || 'Gagal', true);
         } else {
           scheduleShotRefresh();
+          scheduleVideosRefresh(params.type);
         }
         return res.body;
       })
@@ -270,6 +280,47 @@
       send({ type: 'swipe', x1: fx(sX), y1: fy(sY), x2: fx(e.clientX), y2: fy(e.clientY) });
     }
   });
+
+  var videosLoaded = false, videosTimer = null;
+  function refreshVideos() {
+    if (!pin) { showPinBox(); setStatus('Isi PIN dari layar TV dulu.', true); return; }
+    fetch('/videos?pin=' + encodeURIComponent(pin))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        videosLoaded = true;
+        var box = document.getElementById('videos');
+        box.innerHTML = '';
+        if (!j.ok || !j.items.length) { box.innerHTML = '<i>Belum ada video terdeteksi di halaman ini.</i>'; return; }
+        j.items.forEach(function (v) {
+          var row = document.createElement('div'); row.className = 'fav';
+          var label = document.createElement('button');
+          label.textContent = '[' + v.kind.toUpperCase() + '] ' + v.label;
+          label.title = v.url;
+          label.onclick = function () { setStatus(v.url); };
+          row.appendChild(label);
+          if (v.playable) {
+            var p = document.createElement('button'); p.textContent = '▶ Pemutar';
+            p.onclick = function () { send({ type: 'play', url: v.url }); };
+            row.appendChild(p);
+          }
+          if (v.domIndex >= 0) {
+            var f = document.createElement('button'); f.textContent = 'Layar Penuh';
+            f.onclick = function () { send({ type: 'video_full', index: v.domIndex }); };
+            row.appendChild(f);
+          }
+          box.appendChild(row);
+        });
+      })
+      .catch(function () { setStatus('Tidak terhubung ke box. Cek WiFi yang sama.', true); });
+  }
+  function scheduleVideosRefresh(type) {
+    if (!videosLoaded) return;
+    if (type !== 'open' && type !== 'nav') return;
+    clearTimeout(videosTimer);
+    // Halaman perlu waktu memuat + stream perlu waktu terdeteksi.
+    videosTimer = setTimeout(refreshVideos, 1800);
+  }
+  document.getElementById('videosBtn').onclick = refreshVideos;
 
   var pad = document.getElementById('pad'), startX = 0, startY = 0, startT = 0;
   pad.addEventListener('pointerdown', function (e) {

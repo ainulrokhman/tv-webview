@@ -2,12 +2,14 @@ package id.my.awebdev.tvbrowser
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -15,6 +17,7 @@ import android.view.View
 import android.view.WindowManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -47,6 +50,11 @@ class MainActivity : AppCompatActivity(), BrowserController {
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
     private var defaultUa: String = ""
+
+    private val detector = VideoDetector()
+
+    @Volatile
+    private var currentPageUrl: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -130,14 +138,28 @@ class MainActivity : AppCompatActivity(), BrowserController {
                 return true
             }
 
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest
+            ): WebResourceResponse? {
+                // Pengamat murni untuk deteksi video: mencatat alamat
+                // stream yang dimuat halaman, tidak pernah mengubah
+                // atau membalas permintaan apa pun (selalu null).
+                request.url?.toString()?.let { detector.noteRequest(it, currentPageUrl) }
+                return null
+            }
+
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                 progress.visibility = View.VISIBLE
+                currentPageUrl = url ?: ""
+                detector.clear()
                 refreshConnectPanel()
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
                 progress.visibility = View.GONE
                 refreshConnectPanel()
+                scanDomVideos()
             }
         }
 
@@ -383,6 +405,56 @@ class MainActivity : AppCompatActivity(), BrowserController {
     override fun currentPage(): BrowserController.PageInfo =
         BrowserController.PageInfo(webView.url ?: "", webView.title ?: "")
 
+    override fun detectedVideos(): List<DetectedVideo> {
+        // Minta pindai DOM segar untuk permintaan berikutnya; yang
+        // dikembalikan sekarang adalah potret terakhir yang diketahui.
+        webView.post { scanDomVideos() }
+        return detector.snapshot()
+    }
+
+    override fun playVideo(url: String) {
+        val entry = detector.snapshot().firstOrNull { it.url == url }
+        val intent = Intent(this, PlayerActivity::class.java).apply {
+            putExtra(PlayerActivity.EXTRA_URL, url)
+            putExtra(PlayerActivity.EXTRA_REFERER, entry?.pageUrl ?: currentPageUrl)
+            putExtra(PlayerActivity.EXTRA_UA, defaultUa)
+        }
+        startActivity(intent)
+    }
+
+    override fun fullscreenVideo(domIndex: Int) {
+        if (domIndex < 0) return
+        // Minta elemen <video> itu berputar lalu layar penuh; tampilan
+        // layar penuhnya sendiri ditangani WebChromeClient yang ada.
+        val js = "(function(){var v=document.querySelectorAll('video')[$domIndex];" +
+            "if(!v)return;try{v.play();}catch(e){}" +
+            "var r=v.requestFullscreen||v.webkitRequestFullscreen;" +
+            "if(r){try{r.call(v);}catch(e){}}})()"
+        webView.evaluateJavascript(js, null)
+    }
+
+    /** Pindai elemen <video> di halaman dan simpan hasilnya ke detektor. */
+    private fun scanDomVideos() {
+        webView.evaluateJavascript(DOM_SCAN_JS) { result ->
+            try {
+                val text = org.json.JSONTokener(result).nextValue() as? String
+                    ?: return@evaluateJavascript
+                val arr = org.json.JSONArray(text)
+                val list = mutableListOf<DetectedVideo>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val src = o.optString("src")
+                    if (src.isNotEmpty()) {
+                        list.add(detector.domVideo(src, currentPageUrl, o.optInt("domIndex", i)))
+                    }
+                }
+                detector.setDomVideos(list)
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Hasil pindai video DOM tidak bisa dibaca", e)
+            }
+        }
+    }
+
     // ---- Bantuan internal ----
 
     private fun sendKey(keyCode: Int) {
@@ -436,6 +508,13 @@ class MainActivity : AppCompatActivity(), BrowserController {
     companion object {
         private const val REQ_NOTIFICATIONS = 1001
         private const val MAX_SHOT_WIDTH = 960
+        private const val DOM_SCAN_JS =
+            "(function(){var out=[];var vs=document.querySelectorAll('video');" +
+                "for(var i=0;i<vs.length;i++){var v=vs[i];" +
+                "var src=v.currentSrc||v.src||'';" +
+                "if(!src){var s=v.querySelector('source');if(s){src=s.src||'';}}" +
+                "out.push({src:src,domIndex:i});}" +
+                "return JSON.stringify(out);})()"
         // Halaman awal lokal: form link/keyword + tempat blok QR tampil.
         private const val HOME_URL = "file:///android_asset/home.html"
         private const val DESKTOP_UA =

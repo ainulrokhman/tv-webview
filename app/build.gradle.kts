@@ -66,4 +66,10 @@ dependencies {
     // Pembuat QR untuk panel koneksi TV (hanya encoder; pemindaian
     // dilakukan kamera HP, bukan aplikasi ini)
     implementation("com.google.zxing:core:3.5.3")
+    // Pemutar khusus (ExoPlayer) untuk stream langsung yang terdeteksi:
+    // HLS + DASH + berkas progresif + UI kontrol bawaan.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
 }

@@ -44,6 +44,15 @@ interface BrowserController {
 
     fun currentPage(): PageInfo
 
+    /** Daftar video yang terdeteksi di halaman saat ini. */
+    fun detectedVideos(): List<DetectedVideo>
+
+    /** Putar stream langsung di pemutar khusus. */
+    fun playVideo(url: String)
+
+    /** Minta elemen <video> ke-[domIndex] di halaman menjadi layar penuh. */
+    fun fullscreenVideo(domIndex: Int)
+
     data class PageInfo(val url: String, val title: String)
 }
 

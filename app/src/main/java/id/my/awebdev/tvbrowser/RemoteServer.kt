@@ -46,6 +46,7 @@ class RemoteServer(
             return json(Response.Status.FORBIDDEN, """{"ok":false,"error":"PIN salah"}""")
         }
         return when {
+            session.method == Method.GET && session.uri == "/videos" -> videosResponse()
             session.method == Method.GET && session.uri == "/shot" -> shotResponse()
             session.method == Method.GET && session.uri == "/state" -> stateResponse()
             session.method == Method.GET && session.uri == "/favorites" -> favoritesResponse()
@@ -87,6 +88,23 @@ class RemoteServer(
                         val x2 = (param("x2").toIntOrNull() ?: 0).coerceIn(0, 1000) / 1000f
                         val y2 = (param("y2").toIntOrNull() ?: 0).coerceIn(0, 1000) / 1000f
                         it.swipe(x1, y1, x2, y2)
+                    }
+                    "play" -> {
+                        // Hanya alamat yang benar-benar terdeteksi yang
+                        // boleh diputar — endpoint ini bukan pemutar bebas.
+                        val target = param("url")
+                        val allowed = controller.detectedVideos()
+                            .any { it.url == target && it.playable }
+                        if (!allowed) {
+                            return json(
+                                Response.Status.BAD_REQUEST,
+                                """{"ok":false,"error":"Video tidak ada di daftar deteksi"}"""
+                            )
+                        }
+                        post { it.playVideo(target) }
+                    }
+                    "video_full" -> post {
+                        it.fullscreenVideo(param("index").toIntOrNull() ?: -1)
                     }
                     "key" -> post { it.key(param("code")) }
                     "text" -> post { it.typeText(param("value")) }
@@ -151,6 +169,18 @@ class RemoteServer(
         )
         response.addHeader("Cache-Control", "no-store")
         return response
+    }
+
+    private fun videosResponse(): Response {
+        val controller = BrowserHolder.controller
+            ?: return json(Response.Status.OK, """{"ok":true,"items":[]}""")
+        // Detektor aman dibaca dari thread server (datanya dijaga kunci
+        // sendiri); tidak ada WebView yang disentuh di sini.
+        val items = controller.detectedVideos().joinToString(",") { v ->
+            """{"url":"${escape(v.url)}","kind":"${v.kind}","playable":${v.playable},""" +
+                """"label":"${escape(v.label)}","page":"${escape(v.pageUrl)}","domIndex":${v.domIndex}}"""
+        }
+        return json(Response.Status.OK, """{"ok":true,"items":[$items]}""")
     }
 
     private fun favoritesResponse(): Response {
