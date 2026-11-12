@@ -20,8 +20,28 @@ android {
         versionName = "1.0"
     }
 
+    // Kunci tanda tangan TETAP, dibaca dari environment — di GitHub
+    // Actions nilainya datang dari Secrets dan keystore-nya didekode ke
+    // file temp mesin build. Tanpa env ini (build lokal) tidak ada
+    // penandatanganan khusus. Kunci yang sama di setiap build membuat
+    // APK baru bisa dipasang menimpa yang lama tanpa uninstall.
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (System.getenv("KEYSTORE_PATH") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
