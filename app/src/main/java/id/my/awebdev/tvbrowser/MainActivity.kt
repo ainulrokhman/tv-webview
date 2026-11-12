@@ -1,9 +1,10 @@
 package id.my.awebdev.tvbrowser
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
@@ -21,6 +22,8 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 /**
  * Layar TV: satu WebView layar penuh yang seluruh kendalinya datang dari
@@ -34,16 +37,13 @@ class MainActivity : AppCompatActivity(), BrowserController {
     private lateinit var connectPanel: LinearLayout
     private lateinit var qrImage: ImageView
     private lateinit var infoText: TextView
-    private lateinit var urlText: TextView
+    private lateinit var pinText: TextView
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var chromeClient: WebChromeClient
 
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
     private var defaultUa: String = ""
-
-    private val infoHandler = Handler(Looper.getMainLooper())
-    private val hideInfo = Runnable { connectPanel.visibility = View.GONE }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
         connectPanel = findViewById(R.id.connectPanel)
         qrImage = findViewById(R.id.qrImage)
         infoText = findViewById(R.id.infoText)
-        urlText = findViewById(R.id.urlText)
+        pinText = findViewById(R.id.pinText)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
 
         configureWebView()
@@ -69,7 +69,8 @@ class MainActivity : AppCompatActivity(), BrowserController {
             webView.restoreState(savedInstanceState)
         }
         webView.requestFocus()
-        showConnectPanel()
+        requestNotificationPermissionIfNeeded()
+        refreshConnectPanel()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -91,7 +92,29 @@ class MainActivity : AppCompatActivity(), BrowserController {
                 view: WebView,
                 request: WebResourceRequest
             ): Boolean {
-                val scheme = request.url.scheme ?: return true
+                val uri = request.url
+                // Form halaman awal memakai skema khusus tvbrowser:// —
+                // isinya (link atau kata pencarian) diputuskan UrlResolver,
+                // bukan dimuat apa adanya.
+                if (uri.scheme == "tvbrowser") {
+                    val q = uri.getQueryParameter("q")?.trim().orEmpty()
+                    if (q.isNotEmpty()) {
+                        UrlResolver.resolve(q)?.let { view.loadUrl(it) }
+                    }
+                    return true
+                }
+                // Kotak pencarian DuckDuckGo yang diisi link: langsung ke
+                // link-nya, jangan tampilkan hasil pencarian. Inilah jalur
+                // "link dari aplikasi berakhir jadi pencarian".
+                val host = uri.host ?: ""
+                if (host == "duckduckgo.com" || host.endsWith(".duckduckgo.com")) {
+                    val q = uri.getQueryParameter("q")?.trim().orEmpty()
+                    if (q.isNotEmpty() && UrlResolver.findLink(q) != null) {
+                        UrlResolver.resolve(q)?.let { view.loadUrl(it) }
+                        return true
+                    }
+                }
+                val scheme = uri.scheme ?: return true
                 // Hanya web yang dibuka di dalam aplikasi. Skema lain
                 // (intent://, market://, tel:, unduhan) ditahan di sini —
                 // sesuai rencana Tahap 4, jangan lompat keluar diam-diam.
@@ -106,12 +129,12 @@ class MainActivity : AppCompatActivity(), BrowserController {
 
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                 progress.visibility = View.VISIBLE
-                updateInfoText()
+                refreshConnectPanel()
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
                 progress.visibility = View.GONE
-                updateInfoText()
+                refreshConnectPanel()
             }
         }
 
@@ -121,7 +144,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
             }
 
             override fun onReceivedTitle(view: WebView, title: String?) {
-                updateInfoText()
+                refreshConnectPanel()
             }
 
             // Video HTML5 yang meminta layar penuh (tombol fullscreen di
@@ -164,41 +187,63 @@ class MainActivity : AppCompatActivity(), BrowserController {
         customCallback = null
     }
 
-    // ---- Panel koneksi (QR + alamat remote + PIN + URL aktif) ----
+    // ---- Blok koneksi halaman awal (QR + link + PIN) ----
 
-    private fun updateInfoText() {
-        val ip = ServerService.localIpAddress() ?: "?"
-        infoText.text =
-            "Remote HP: http://$ip:${RemoteServer.PORT}  •  PIN ${ServerService.pin(this)}"
-        // URL aktif ditampilkan utuh (bukan judul halaman) supaya bisa
-        // dibaca persis — inilah "link" yang dulu tidak sempat terbaca.
-        urlText.text = webView.url ?: ""
-    }
-
-    private fun showConnectPanel() {
-        updateInfoText()
-        // QR dibuat ulang setiap panel tampil, jadi selalu memakai
-        // alamat IP box yang berlaku saat itu juga.
+    private fun updatePanelContent() {
         val ip = ServerService.localIpAddress()
+        infoText.text = ip?.let { "http://$it:${RemoteServer.PORT}" } ?: "Alamat tidak ditemukan"
+        pinText.text =
+            "PIN ${ServerService.pin(this)} — pindai QR di atas, atau buka link ini di browser HP"
         val qr = ip?.let {
             QrCodeHelper.makeBitmap(
                 "http://$it:${RemoteServer.PORT}/?pin=${ServerService.pin(this)}"
             )
         }
         if (qr != null) {
+            // Ukuran QR mengikuti layar: setengah lebar atau dua perlima
+            // tinggi, mana yang lebih kecil — cair di TV maupun HP,
+            // bukan patokan dp mati. Bitmap dibuat ulang tiap konten
+            // diperbarui, jadi alamat IP-nya selalu yang berlaku kini.
+            val size = Math.min(
+                resources.displayMetrics.widthPixels / 2,
+                resources.displayMetrics.heightPixels * 2 / 5
+            ).coerceAtLeast(120)
+            qrImage.layoutParams = qrImage.layoutParams.apply {
+                width = size
+                height = size
+            }
             qrImage.setImageBitmap(qr)
             qrImage.visibility = View.VISIBLE
         } else {
             qrImage.visibility = View.GONE
         }
-        connectPanel.visibility = View.VISIBLE
-        infoHandler.removeCallbacks(hideInfo)
-        infoHandler.postDelayed(hideInfo, PANEL_TIMEOUT_MS)
     }
 
-    private fun hideConnectPanel() {
-        infoHandler.removeCallbacks(hideInfo)
-        connectPanel.visibility = View.GONE
+    /** Blok koneksi hanya tampil di halaman awal, dan tidak hilang sendiri. */
+    private fun refreshConnectPanel() {
+        val url = webView.url
+        if (url != null && url != HOME_URL) {
+            connectPanel.visibility = View.GONE
+            return
+        }
+        updatePanelContent()
+        connectPanel.visibility = View.VISIBLE
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        // Android 13+ menahan notifikasi (termasuk penanda server aktif)
+        // sampai diizinkan; di Android lama langkah ini dilewati.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) return
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQ_NOTIFICATIONS
+        )
     }
 
     // ---- BrowserController (dipanggil server lewat thread utama) ----
@@ -209,7 +254,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
     }
 
     override fun showInfo() {
-        showConnectPanel()
+        webView.loadUrl(HOME_URL)
     }
 
     override fun navigate(action: String) {
@@ -282,9 +327,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
     }
 
     private fun handleBack() {
-        if (connectPanel.visibility == View.VISIBLE) {
-            hideConnectPanel()
-        } else if (customView != null) {
+        if (customView != null) {
             hideCustomView()
         } else if (webView.canGoBack()) {
             webView.goBack()
@@ -297,7 +340,7 @@ class MainActivity : AppCompatActivity(), BrowserController {
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_MENU) {
-            showConnectPanel()
+            showInfo()
             return true
         }
         return super.onKeyDown(keyCode, event)
@@ -319,7 +362,6 @@ class MainActivity : AppCompatActivity(), BrowserController {
     }
 
     override fun onDestroy() {
-        infoHandler.removeCallbacks(hideInfo)
         if (BrowserHolder.controller === this) {
             BrowserHolder.controller = null
         }
@@ -328,9 +370,9 @@ class MainActivity : AppCompatActivity(), BrowserController {
     }
 
     companion object {
-        // Panel koneksi tampil cukup lama untuk sempat dipindai/dibaca.
-        private const val PANEL_TIMEOUT_MS = 60_000L
-        private const val HOME_URL = "https://html.duckduckgo.com/html/"
+        private const val REQ_NOTIFICATIONS = 1001
+        // Halaman awal lokal: form link/keyword + tempat blok QR tampil.
+        private const val HOME_URL = "file:///android_asset/home.html"
         private const val DESKTOP_UA =
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"

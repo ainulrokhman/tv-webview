@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV Browser Remote</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #101418; color: #f2f5f7; }
+  main { padding: 4vmin; display: flex; flex-direction: column; gap: 1rem; max-width: 60rem; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0.2em 0; }
+  p { color: #b9c6d0; line-height: 1.5; margin: 0; }
+  form { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+  input { flex: 1 1 16rem; min-width: 0; font-size: 1.25rem; padding: 0.8rem; border-radius: 0.6rem; border: 1px solid #33404d; background: #232d38; color: inherit; }
+  button { font-size: 1.25rem; padding: 0.8rem 1.4rem; border-radius: 0.6rem; border: 0; background: #2f6db3; color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TV Browser Remote</h1>
+  <p>Pindai QR di bagian atas layar untuk mengendalikan dari HP. Atau isi form ini langsung dari box: tempel link untuk membukanya, ketik kata untuk mencarinya.</p>
+  <!-- Dikirim ke skema khusus tvbrowser:// — WebViewClient mencegatnya
+       dan UrlResolver yang memutuskan: link dibuka langsung, kata
+       diteruskan ke pencarian. -->
+  <form action="tvbrowser://go" method="get">
+    <input name="q" placeholder="Tempel link, atau ketik kata pencarian" autocomplete="off">
+    <button type="submit">Buka</button>
+  </form>
+</main>
+</body>
+</html>

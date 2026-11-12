@@ -10,11 +10,12 @@ android {
     defaultConfig {
         applicationId = "id.my.awebdev.tvbrowser"
         minSdk = 24
-        // Perangkat tujuan adalah NexVidio Android 10 (API 29). targetSdk
-        // disamakan ke 29 supaya perilaku service latar & izin mengikuti
-        // aturan Android 10 yang benar-benar berjalan di box, bukan aturan
-        // Android 14 yang tidak relevan untuk pemakaian pribadi ini.
-        targetSdk = 29
+        // targetSdk dinaikkan ke 34 (Android 14) supaya aplikasi juga
+        // berperilaku benar di Android terbaru (HP penguji dan perangkat
+        // masa depan): foreground service wajib bertipe khusus dan
+        // notifikasi butuh izin. Box NexVidio Android 10 tidak terpengaruh
+        // karena yang menentukan bisa/tidaknya dipasang adalah minSdk.
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
     }

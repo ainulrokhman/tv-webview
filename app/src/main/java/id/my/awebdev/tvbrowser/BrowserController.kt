@@ -12,7 +12,7 @@ interface BrowserController {
      */
     fun openUrl(raw: String)
 
-    /** Tampilkan panel koneksi (QR + alamat + PIN) di layar TV. */
+    /** Ke halaman awal — di sanalah blok QR + link tampil. */
     fun showInfo()
 
     /** Aksi navigasi: back | forward | reload | stop | home. */

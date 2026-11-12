@@ -9,8 +9,12 @@ yang dikendalikan hanya aplikasi ini sendiri.
 
 - Aplikasi box = satu WebView + server HTTP lokal (NanoHTTPD, port 8765)
   yang hidup sebagai foreground service dan menyala lagi setelah booting.
-- Di layar TV tampil info bar sebentar: alamat server + **PIN 4 digit**.
-- Buka alamat itu di browser HP, masukkan PIN sekali (tersimpan di HP).
+- Halaman awal aplikasi menampilkan blok QR (alamat + **PIN 4 digit**) dan
+  link server; blok itu hanya tampil di halaman awal dan tidak hilang
+  sendiri. Di bawahnya ada form: tempel link untuk membukanya, atau ketik
+  kata untuk mencarinya.
+- Pindai QR itu dengan kamera HP (langsung terhubung), atau buka alamatnya
+  di browser HP dan masukkan PIN sekali (tersimpan di HP).
 - Dari HP kamu bisa:
   - **Tempel link apa pun** (http/https) atau ketik kata pencarian
     (otomatis dicari lewat DuckDuckGo HTML yang ringan).
@@ -38,13 +42,15 @@ yang dikendalikan hanya aplikasi ini sendiri.
   dan tidak dijalankan — sesuai keputusan desain Tahap 4.
 - Keamanan: server HTTP tanpa enkripsi + PIN 4 digit. Hanya untuk
   jaringan rumah sendiri; jangan pernah diekspos ke internet.
-- `targetSdk` disetel 29 mengikuti Android 10 di box, supaya perilaku
-  service/izin sesuai sistem yang benar-benar menjalankan aplikasi ini.
+- `targetSdk` 34 (Android 14) supaya perilaku service/izin juga benar di
+  Android terbaru; box Android 10 tetap bisa memasang karena `minSdk` 24.
+  Foreground service dideklarasikan bertipe `specialUse` di manifest.
 
 ## Build (di Android Studio, laptop)
 
-Proyek ini **belum pernah dikompilasi** — lingkungan pembuatnya tidak
-punya Android SDK/JDK. Wrapper Gradle versi 8.7 dikonfigurasi, tetapi
+Build utama lewat **GitHub Actions** (workflow *Build APK*: push ke
+branch `done` memicu build, APK diunduh dari artifact). Untuk build lokal
+di Android Studio, wrapper Gradle versi 8.7 dikonfigurasi tetapi
 `gradle-wrapper.jar` belum ada. Cara termudah:
 
 1. Buka Android Studio → *New Project* → *Empty Views Activity* (Kotlin),
@@ -64,7 +70,7 @@ NanoHTTPD 2.3.1. AGP 8.5.2, Kotlin 2.0.20, compileSdk 34, minSdk 24.
 1. Salin APK ke flashdisk → pasang lewat file manager box (izinkan
    instalasi dari sumber tidak dikenal bila diminta), atau pasang lewat
    ADB bila tersedia.
-2. Buka **TV Browser Remote**. Info bar menunjukkan alamat + PIN.
+2. Buka **TV Browser Remote**. Halaman awal menampilkan QR + link + PIN.
 3. HP dan box satu jaringan (disarankan box lewat **LAN kabel**).
    Buka alamat itu di browser HP, masukkan PIN.
 4. Tempel link pertama dari HP — halaman harus tampil di TV.
@@ -85,3 +91,5 @@ Bila ada error saat build pertama di Android Studio, kirim pesan errornya
 - `BootReceiver.kt` — server menyala setelah booting.
 - `FavoritesStore.kt` — favorit di SharedPreferences.
 - `assets/remote.html` — halaman remote HP (satu file, tanpa build).
+- `assets/home.html` — halaman awal lokal di TV (form link/keyword yang
+  dikirim lewat skema `tvbrowser://` dan diputuskan `UrlResolver`).
